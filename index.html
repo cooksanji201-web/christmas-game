@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>💖 Flappy Heart Multiplayer Online</title>
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #0a0018, #1a0035, #0a0018);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            overflow: hidden;
+        }
+
+        /* Floating hearts background */
+        .bg-heart {
+            position: fixed;
+            color: rgba(255, 105, 180, 0.15);
+            animation: floatUp linear infinite;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        @keyframes floatUp {
+            0% {
+                transform: translateY(100vh) rotate(0deg);
+                opacity: 0;
+            }
+
+            10% {
+                opacity: 1;
+            }
+
+            90% {
+                opacity: 0.5;
+            }
+
+            100% {
+                transform: translateY(-50px) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        /* Lobby */
+        #lobby {
+            text-align: center;
+            background: rgba(0, 0, 0, 0.85);
+            padding: 50px;
+            border-radius: 30px;
+            border: 3px solid #ff1493;
+            box-shadow: 0 0 60px rgba(255, 20, 147, 0.4);
+            z-index: 10;
+            position: relative;
+        }
+
+        #lobby h1 {
+            font-size: 2.8em;
+            background: linear-gradient(90deg, #ff1493, #ff69b4, #ffd700);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        #lobby h2 {
+            color: #ff69b4;
+            font-size: 1.2em;
+            margin-bottom: 30px;
+            font-weight: 400;
+        }
+
+        .avatar-select {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .avatar-option {
+            font-size: 40px;
+            padding: 15px;
+            border-radius: 50%;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 3px solid transparent;
+        }
+
+        .avatar-option:hover,
+        .avatar-option.selected {
+            background: rgba(255, 20, 147, 0.3);
+            border-color: #ff1493;
+            transform: scale(1.2);
+        }
+
+        #lobby input {
+            font-size: 1.2em;
+            padding: 15px 30px;
+            border: 2px solid rgba(255, 105, 180, 0.5);
+            border-radius: 15px;
+            background: rgba(255, 20, 147, 0.1);
+            color: white;
+            width: 300px;
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        #lobby input::placeholder {
+            color: rgba(255, 105, 180, 0.5);
+        }
+
+        #lobby input:focus {
+            outline: none;
+            border-color: #ff1493;
+            box-shadow: 0 0 20px rgba(255, 20, 147, 0.4);
+        }
+
+        #playBtn {
+            font-size: 1.4em;
+            padding: 18px 60px;
+            background: linear-gradient(135deg, #ff1493, #c71585);
+            color: white;
+            border: none;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: 700;
+            box-shadow: 0 8px 30px rgba(255, 20, 147, 0.5);
+            transition: all 0.3s;
+        }
+
+        #playBtn:hover {
+            transform: translateY(-5px) scale(1.05);
+            box-shadow: 0 15px 40px rgba(255, 20, 147, 0.6);
+        }
+
+        #status {
+            margin-top: 25px;
+            font-size: 1.1em;
+            color: #00ff7f;
+            min-height: 30px;
+        }
+
+        /* Game */
+        #game {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 100;
+        }
+
+        #gameCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 40px;
+            z-index: 101;
+        }
+
+        .player-hud {
+            background: rgba(0, 0, 0, 0.8);
+            padding: 15px 25px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid;
+            min-width: 150px;
+        }
+
+        .player-hud.p1 {
+            border-color: #ff1493;
+        }
+
+        .player-hud.p2 {
+            border-color: #00bfff;
+        }
+
+        .player-hud.dead {
+            opacity: 0.5;
+        }
+
+        .player-hud .avatar {
+            font-size: 30px;
+        }
+
+        .player-hud .name {
+            font-size: 14px;
+            color: #ff69b4;
+            margin: 5px 0;
+        }
+
+        .player-hud .score {
+            font-size: 28px;
+            font-weight: 700;
+            color: #ffd700;
+        }
+
+        #countdown {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 150px;
+            font-weight: 700;
+            color: #ff1493;
+            text-shadow: 0 0 50px #ff1493;
+            z-index: 102;
+            display: none;
+            animation: countPulse 1s ease infinite;
+        }
+
+        @keyframes countPulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1);
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.2);
+            }
+        }
+
+        #backBtn {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            padding: 12px 25px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #ff69b4;
+            border: 2px solid #ff69b4;
+            border-radius: 15px;
+            cursor: pointer;
+            z-index: 101;
+            font-size: 14px;
+        }
+
+        /* Game Over */
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.95);
+            padding: 50px;
+            border-radius: 30px;
+            text-align: center;
+            border: 3px solid #ffd700;
+            box-shadow: 0 0 80px rgba(255, 215, 0, 0.4);
+            z-index: 200;
+        }
+
+        #gameOver h2 {
+            font-size: 2.5em;
+            color: #ffd700;
+            margin-bottom: 20px;
+        }
+
+        #winnerInfo {
+            font-size: 3em;
+            margin-bottom: 15px;
+        }
+
+        #winnerName {
+            font-size: 1.5em;
+            color: #00ff7f;
+            margin-bottom: 30px;
+        }
+
+        .score-row {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        .score-card {
+            background: rgba(255, 20, 147, 0.2);
+            padding: 20px 30px;
+            border-radius: 15px;
+            border: 2px solid rgba(255, 105, 180, 0.5);
+        }
+
+        .score-card.winner {
+            background: rgba(255, 215, 0, 0.2);
+            border-color: #ffd700;
+        }
+
+        .score-card .avatar {
+            font-size: 40px;
+        }
+
+        .score-card .name {
+            color: #ff69b4;
+            margin: 8px 0;
+        }
+
+        .score-card .score {
+            font-size: 32px;
+            font-weight: 700;
+            color: #ffd700;
+        }
+
+        #gameOver button {
+            font-size: 1.2em;
+            padding: 15px 40px;
+            background: linear-gradient(135deg, #ff1493, #c71585);
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 8px;
+            font-weight: 600;
+        }
+
+        #gameOver button:hover {
+            transform: scale(1.05);
+        }
+
+        /* Instructions overlay */
+        #instructions {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: rgba(255, 105, 180, 0.8);
+            font-size: 20px;
+            z-index: 101;
+            display: none;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Background hearts -->
+    <div id="bgHearts"></div>
+
+    <!-- Lobby -->
+    <div id="lobby">
+        <h1>💖 Flappy Heart</h1>
+        <h2>Multiplayer Online</h2>
+
+        <div class="avatar-select">
+            <span class="avatar-option selected" data-avatar="💖" onclick="selectAvatar(this)">💖</span>
+            <span class="avatar-option" data-avatar="🦋" onclick="selectAvatar(this)">🦋</span>
+            <span class="avatar-option" data-avatar="⭐" onclick="selectAvatar(this)">⭐</span>
+            <span class="avatar-option" data-avatar="🔥" onclick="selectAvatar(this)">🔥</span>
+            <span class="avatar-option" data-avatar="🌸" onclick="selectAvatar(this)">🌸</span>
+        </div>
+
+        <input type="text" id="nameInput" placeholder="Nhập tên của bạn..." maxlength="12">
+        <br>
+        <button id="playBtn" onclick="joinGame()">💖 CHƠI NGAY</button>
+        <div id="status"></div>
+    </div>
+
+    <!-- Game -->
+    <div id="game">
+        <button id="backBtn" onclick="leaveGame()">← Thoát</button>
+
+        <div id="hud">
+            <div class="player-hud p1" id="hud1">
+                <div class="avatar" id="avatar1">💖</div>
+                <div class="name" id="name1">Player 1</div>
+                <div class="score" id="score1">0</div>
+            </div>
+            <div class="player-hud p2" id="hud2">
+                <div class="avatar" id="avatar2">💖</div>
+                <div class="name" id="name2">Đang chờ...</div>
+                <div class="score" id="score2">0</div>
+            </div>
+        </div>
+
+        <div id="countdown">3</div>
+        <div id="instructions">Nhấn SPACE hoặc CLICK để bay!</div>
+
+        <canvas id="gameCanvas"></canvas>
+
+        <div id="gameOver">
+            <h2>🏆 KẾT THÚC!</h2>
+            <div id="winnerInfo"></div>
+            <div id="winnerName"></div>
+            <div class="score-row" id="scoreRow"></div>
+            <button onclick="playAgain()">🔄 Chơi Lại</button>
+            <button onclick="leaveGame()">🏠 Lobby</button>
+        </div>
+    </div>
+
+    <script>
+        const socket = io(window.location.origin);
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        let selectedAvatar = '💖';
+        let myId = null;
+        let players = [];
+        let pipes = [];
+        let gameStarted = false;
+
+        // Resize canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        // Background hearts
+        function createBgHearts() {
+            const container = document.getElementById('bgHearts');
+            setInterval(() => {
+                const heart = document.createElement('div');
+                heart.className = 'bg-heart';
+                heart.textContent = ['💖', '💕', '💗', '❤️'][Math.floor(Math.random() * 4)];
+                heart.style.left = Math.random() * 100 + '%';
+                heart.style.fontSize = (20 + Math.random() * 30) + 'px';
+                heart.style.animationDuration = (6 + Math.random() * 6) + 's';
+                container.appendChild(heart);
+                setTimeout(() => heart.remove(), 12000);
+            }, 500);
+        }
+        createBgHearts();
+
+        function selectAvatar(el) {
+            document.querySelectorAll('.avatar-option').forEach(a => a.classList.remove('selected'));
+            el.classList.add('selected');
+            selectedAvatar = el.dataset.avatar;
+        }
+
+        function joinGame() {
+            const name = document.getElementById('nameInput').value.trim() || 'Player';
+            socket.emit('join', { name, avatar: selectedAvatar });
+            document.getElementById('status').textContent = '⏳ Đang tìm đối thủ...';
+        }
+
+        socket.on('joined', (data) => {
+            myId = data.playerId;
+            document.getElementById('status').textContent = `✅ Bạn là Player ${data.playerNum}. Đang chờ...`;
+        });
+
+        socket.on('players', (data) => {
+            players = data;
+            updateHUD();
+            if (players.length === 2) {
+                document.getElementById('status').textContent = '👥 Đã đủ 2 người! Chuẩn bị...';
+            }
+        });
+
+        socket.on('countdown', (count) => {
+            document.getElementById('lobby').style.display = 'none';
+            document.getElementById('game').style.display = 'block';
+            document.getElementById('countdown').style.display = 'block';
+            document.getElementById('countdown').textContent = count;
+        });
+
+        socket.on('start', () => {
+            document.getElementById('countdown').style.display = 'none';
+            document.getElementById('instructions').style.display = 'block';
+            setTimeout(() => {
+                document.getElementById('instructions').style.display = 'none';
+            }, 2000);
+            gameStarted = true;
+        });
+
+        socket.on('state', (data) => {
+            players = data.players;
+            pipes = data.pipes;
+            updateHUD();
+            draw();
+        });
+
+        socket.on('gameOver', (data) => {
+            gameStarted = false;
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('winnerInfo').textContent = data.winnerAvatar;
+            document.getElementById('winnerName').textContent = `🎉 ${data.winner} THẮNG!`;
+
+            const scoreRow = document.getElementById('scoreRow');
+            scoreRow.innerHTML = data.scores.map(p => `
+                <div class="score-card ${p.isWinner ? 'winner' : ''}">
+                    <div class="avatar">${p.avatar}</div>
+                    <div class="name">${p.name}</div>
+                    <div class="score">${p.score}</div>
+                </div>
+            `).join('');
+        });
+
+        socket.on('playerLeft', () => {
+            alert('💔 Đối thủ đã rời phòng!');
+            location.reload();
+        });
+
+        function updateHUD() {
+            if (players[0]) {
+                document.getElementById('avatar1').textContent = players[0].avatar;
+                document.getElementById('name1').textContent = players[0].name;
+                document.getElementById('score1').textContent = players[0].score;
+                document.getElementById('hud1').classList.toggle('dead', !players[0].alive);
+            }
+            if (players[1]) {
+                document.getElementById('avatar2').textContent = players[1].avatar;
+                document.getElementById('name2').textContent = players[1].name;
+                document.getElementById('score2').textContent = players[1].score;
+                document.getElementById('hud2').classList.toggle('dead', !players[1].alive);
+            }
+        }
+
+        function draw() {
+            const w = canvas.width, h = canvas.height;
+            ctx.clearRect(0, 0, w, h);
+
+            // Sky gradient
+            const sky = ctx.createLinearGradient(0, 0, 0, h);
+            sky.addColorStop(0, '#0a0018');
+            sky.addColorStop(0.5, '#1a0035');
+            sky.addColorStop(1, '#2d0050');
+            ctx.fillStyle = sky;
+            ctx.fillRect(0, 0, w, h);
+
+            // Stars
+            for (let i = 0; i < 50; i++) {
+                const x = (i * 137) % w;
+                const y = (i * 89) % (h * 0.6);
+                const size = 1 + (i % 3);
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 200, 220, ${0.3 + Math.sin(Date.now() / 500 + i) * 0.3})`;
+                ctx.fill();
+            }
+
+            // Pipes
+            const pipeWidth = 70;
+            const pipeGap = 200;
+            pipes.forEach(pipe => {
+                // Top pipe
+                const topGrad = ctx.createLinearGradient(pipe.x, 0, pipe.x + pipeWidth, 0);
+                topGrad.addColorStop(0, '#ff1493');
+                topGrad.addColorStop(0.5, '#ff69b4');
+                topGrad.addColorStop(1, '#c71585');
+                ctx.fillStyle = topGrad;
+                ctx.fillRect(pipe.x, 0, pipeWidth, pipe.gapY);
+
+                // Top cap
+                ctx.fillRect(pipe.x - 8, pipe.gapY - 30, pipeWidth + 16, 30);
+
+                // Bottom pipe
+                const bottomY = pipe.gapY + pipeGap;
+                ctx.fillStyle = topGrad;
+                ctx.fillRect(pipe.x, bottomY, pipeWidth, h - bottomY);
+
+                // Bottom cap
+                ctx.fillRect(pipe.x - 8, bottomY, pipeWidth + 16, 30);
+
+                // Glow
+                ctx.shadowColor = '#ff1493';
+                ctx.shadowBlur = 20;
+                ctx.shadowBlur = 0;
+            });
+
+            // Players
+            players.forEach((p, idx) => {
+                if (!p.alive) {
+                    ctx.globalAlpha = 0.4;
+                }
+
+                // Glow
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 35, 0, Math.PI * 2);
+                ctx.fillStyle = idx === 0 ? 'rgba(255, 20, 147, 0.3)' : 'rgba(0, 191, 255, 0.3)';
+                ctx.fill();
+
+                // Avatar
+                ctx.font = '45px serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(p.avatar, p.x, p.y);
+
+                // Name tag
+                ctx.font = '12px Poppins';
+                ctx.fillStyle = idx === 0 ? '#ff69b4' : '#00bfff';
+                ctx.fillText(p.name, p.x, p.y - 40);
+
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        // Controls
+        function flap() {
+            if (gameStarted) {
+                socket.emit('flap');
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                flap();
+            }
+        });
+
+        canvas.addEventListener('click', flap);
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            flap();
+        });
+
+        function playAgain() {
+            document.getElementById('gameOver').style.display = 'none';
+            socket.emit('join', {
+                name: document.getElementById('nameInput').value.trim() || 'Player',
+                avatar: selectedAvatar
+            });
+        }
+
+        function leaveGame() {
+            location.reload();
+        }
+    </script>
+</body>
+
+</html>
